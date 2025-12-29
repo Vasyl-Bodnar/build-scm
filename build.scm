@@ -3,6 +3,8 @@
 
 (disable-default-failure)
 
-(configure)
+(configure #:exe-name "zaxia-text")
 
 (compile-c)
+
+;;(install)

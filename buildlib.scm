@@ -11,6 +11,8 @@
 (define *build-directory* #f)
 (define *obj-build-directory* #f)
 (define *executable* #f)
+(define *library* #f)
+(define *library-type* #f)
 (define *extra-args* #f)
 
 (define *fatal-fail* #t)
@@ -38,15 +40,24 @@
 (define (disable-default-failure)
   (set! *fatal-fail* 'ok))
 
-(define* (configure #:key (c-compiler "cc") (exe-name "a") (source-dir "src") (build-dir "build") (obj-dir "obj") (optimization "-O0") (debug "") (wall ""))
+;; lib-type is 'none 'static or 'dynamic
+(define* (configure #:key (c-compiler "cc")
+                    (exe-name "a") (lib-name "a") (lib-type 'none)
+                    (source-dir "src") (build-dir "build") (obj-dir "obj")
+                    (optimization "-O0") (debug "") (wall ""))
   (set! *c-compiler* c-compiler)
   (set! *source-directory* source-dir)
   (set! *build-directory* build-dir)
   (set! *obj-build-directory* (string-append build-dir file-name-separator-string obj-dir))
   (set! *executable* (string-append build-dir file-name-separator-string exe-name))
-  (set! *extra-args* (string-append optimization
-                                    (if (equal? debug "") debug (string-append " " debug))
-                                    (if (equal? wall "") wall (string-append " " wall))))
+  (unless (equal? lib-type 'none)
+    (begin
+      (set! *library* (string-append build-dir file-name-separator-string lib-name))
+      (set! *library-type* lib-type)))
+  (set! *extra-args*
+        (string-append optimization
+                       (if (equal? debug "") debug (string-append " " debug))
+                       (if (equal? wall "") wall (string-append " " wall))))
   (unless (system* *c-compiler* "--version")
     (fail "Could not find a c compiler: " *c-compiler*))
   (unless (let ((st (stat *source-directory* #f)))
@@ -65,7 +76,7 @@
   (check-fail))
 
 (define* (compile-c #:key (num-threads #f))
-  (unless (and *c-compiler* *source-directory* *build-directory* *extra-args*)
+  (unless (and *c-compiler* *source-directory* *build-directory* *obj-build-directory* *executable* *extra-args*)
     (fail "Must run (configure) first"))
   (let ((objs '()))
     (nftw
@@ -87,12 +98,13 @@
          ((invalid-stat) (fail "Could not stat a file: " filename))
          ((directory-not-readable) (fail "Directory is not readable: " filename))
          ((stale-symlink) (fail "Could not follow a symlink: " filename)))))
-    (if (check-fail)
+    (if (and (check-fail) (not (equal? check-fail 'fail)))
         (begin
           (info "Linking an executable")
           (let ((result (status:exit-val (apply system* (cons *c-compiler* (append objs (list "-o" *executable*)))))))
             (if (= result 0) #t (fail "Could not link an executable\nReturned " (number->string result)))))))
   (check-fail))
 
-;; Currently unimplemented
-;;(define (install))
+(define* (install #:key (prefix "/usr/local"))
+  (info "Copying to local bin")
+  (system* "sudo" "cp" *executable* (string-append prefix file-name-separator-string "bin" file-name-separator-string (basename *executable*))))
