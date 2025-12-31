@@ -18,7 +18,6 @@
 (define *build-directory* #f)
 (define *obj-build-directory* #f)
 (define *executable* #f)
-;; Libraries are WIP
 (define *library* #f)
 (define *library-type* #f)
 (define *extra-args* #f)
@@ -79,6 +78,7 @@
   (let* ((tmp-port (mkstemp "/tmp/build-XXXXXX"))
          (bv (get-bytevector-all port)))
     (put-bytevector tmp-port bv)
+    (force-output tmp-port)
     (let ((hash (hash-file (port-filename tmp-port))))
       (delete-file (port-filename tmp-port))
       (close-port tmp-port)
@@ -94,17 +94,16 @@
     (close-port port)
     (if (eof-object? str)
         (fail "Could not get compiler version"))
-    (let* ((port (open-input-string (string-append str *extra-args*)))
+    (let* ((port (open-input-string (string-append str *c-archiver* (apply string-append *extra-args*))))
            (hash (hash-port port)))
       (close-input-port port)
       hash)))
 
-;; TODO: libraries are unsupported at the moment
 ;; lib-type is 'none, 'static, 'dynamic, or 'both
 (define* (configure #:optional (conditional #t) #:key (c-compiler "cc") (c-archiver "ar")
                     (root ".") (exe-name #f) (lib-name exe-name) (lib-type 'none)
                     (source-dir "src") (lib-source-dir source-dir) (build-dir "build") (obj-dir "obj")
-                    (optimization "-O0") (debug "") (wall ""))
+                    (optimization "-O0") (debug "-g") (wall "-Wall"))
   (if (not (or exe-name (and lib-name (memq lib-type '(static dynamic both)))))
       (fail "You need to provide a name for at least one of executable or a library with the type (one of 'static, 'dynamic, 'both)")
       (when conditional
@@ -115,10 +114,7 @@
         (set! *lib-source-directory* (string-append *root* fss lib-source-dir))
         (set! *build-directory* (string-append *root* fss build-dir))
         (set! *obj-build-directory* (string-append *build-directory* fss obj-dir))
-        (set! *extra-args*
-              (string-append optimization
-                             (if (equal? debug "") debug (string-append " " debug))
-                             (if (equal? wall "") wall (string-append " " wall))))
+        (set! *extra-args* (list optimization debug wall))
         (set! *metadata* (string-append *build-directory* fss ".metadata"))
         (when exe-name
           (set! *executable* (string-append *build-directory* fss exe-name)))
@@ -147,8 +143,7 @@
         (unless (file-exists? *metadata*)
           (warn "Could not find metadata")
           (info "Creating new metadata")
-          (let ((file (open *metadata* O_CREAT)))
-            (close file)))
+          (mkdir *metadata*))
         ;; We also need to ensure a few system commands are present, and set them accordingly
         ;; TODO: Consider adding a proper local hash function implementation instead
         (let ((hash-command (or (search-path (parse-path (getenv "PATH")) "b2sum")
@@ -186,7 +181,8 @@
 (define (handle-hash args)
   (case (car args)
     ((hashed) (cadr args))
-    ((finished) (hash-file (cadr args)))))
+    ((finished) (hash-file (cadr args)))
+    ((unfinished) #f)))
 
 (define (check-cache src obj hashes)
   (if (file-exists? obj)
@@ -206,18 +202,17 @@
   (let ((hashes (if num-threads
                     (n-par-map num-threads handle-hash objs)
                     (par-map handle-hash objs))))
-    (call-with-output-file *metadata*
+    (call-with-output-file (string-append *metadata* fss *compiler-info-hash*)
       (lambda (port)
-        (display *compiler-info-hash* port)
-        (newline port)
         (for-each (lambda (hash)
-                    (display hash port)
-                    (newline port))
+                    (when hash
+                      (display hash port)
+                      (newline port)))
                   hashes)))))
 
 (define (compile-c-object-file src obj)
   (info "Compiling " (basename src))
-  (let ((result (status:exit-val (system* *c-compiler* *extra-args* "-c" src "-o" obj))))
+  (let ((result (status:exit-val (apply system* (append (list *c-compiler*) *extra-args* (list "-c" src "-o" obj))))))
     (if (= result 0) (list 'finished src obj)
         (list #f "Could not compile a file: " (basename src) "\nReturned " (number->string result)))))
 
@@ -255,6 +250,17 @@
        (apply fail (cdr obj))))
    objs))
 
+(define (find-metadata)
+  (let ((found #f))
+    (nftw
+     *metadata*
+     (lambda (filename statinfo flag base level)
+       (if (and (eq? flag 'regular)
+                (equal? *compiler-info-hash* (basename filename)))
+           (set! found filename))
+       #t))
+    found))
+
 ;; compiled-objs should be alist of obj and hash
 (define* (collect-objs dir hashes #:optional (compiled-objs '()))
   (let ((objs '()))
@@ -288,15 +294,14 @@
                  *obj-build-directory* *metadata*
                  *compiler-info-hash* *hash-command*)
       (fail "Must run (configure) first"))
-    (let* ((all-hashes (reverse (call-with-input-file *metadata*
+    (let* ((metadata (find-metadata))
+           (hashes (if metadata
+                       (reverse (call-with-input-file metadata
                                   (lambda (port)
                                     (do ((hash (get-line port) (get-line port))
                                          (list '() (cons hash list)))
-                                        ((eof-object? hash) list))))))
-           (compiler-hash-good?
-            (and (> (length all-hashes) 1)
-                 (equal? *compiler-info-hash* (car all-hashes))))
-           (hashes (if compiler-hash-good? (cdr all-hashes) '()))
+                                        ((eof-object? hash) list)))))
+                       '()))
            (exe-objs '())
            (lib-objs '()))
       (when *executable*
@@ -309,11 +314,13 @@
         (if (check-fail) (hash-inputs exe-objs)))
       (when (and *library* (memq *library-type* '(static dynamic both)))
         (set! lib-objs (collect-objs *lib-source-directory* hashes exe-objs))
-        (unless (string-prefix? *source-directory* *lib-source-directory*)
-          (if num-threads
-              (set! lib-objs (n-par-map num-threads handle-compile lib-objs))
-              (set! lib-objs (par-map handle-compile lib-objs)))
-          (check-objs lib-objs))
+        (if (string-prefix? *source-directory* *lib-source-directory*)
+            (begin
+              (if num-threads
+                  (set! lib-objs (n-par-map num-threads handle-compile lib-objs))
+                  (set! lib-objs (par-map handle-compile lib-objs)))
+              (check-objs lib-objs))
+            (info "Already compiled"))
         (if (check-fail) (link-lib (map caddr lib-objs))))
       (if (check-fail) (hash-inputs (delete-duplicates (append exe-objs lib-objs))))))
   (return-fail))
@@ -338,12 +345,20 @@
                       "rm" "-r" *build-directory*)
         (begin
           (delete-file *executable*)
-          (delete-file *metadata*)
+          (delete-file (string-append *library* ".a"))
+          (delete-file (string-append *library* ".so"))
+          (nftw *metadata*
+                (lambda (filename statinfo flag base level)
+                  (when (eq? flag 'regular)
+                    (delete-file filename))
+                  #t))
           (nftw *obj-build-directory*
                 (lambda (filename statinfo flag base level)
-                  (if (and (eq? flag 'regular) (not (equal? (basename filename) (basename filename ".o"))))
-                      (begin (delete-file filename) #t)
-                      #t)))
+                  (when (and (eq? flag 'regular) (not (equal? (basename filename) (basename filename ".o"))))
+                    (delete-file filename))
+                  #t))
+          (system*-fail (lambda (ret) (fail "Could not delete the metadata directory\nReturned " ret))
+                        *rmdir-command* *metadata*)
           (system*-fail (lambda (ret) (fail "Could not delete the obj directory\nReturned " ret))
                         *rmdir-command* *obj-build-directory*)
           (system*-fail (lambda (ret) (fail "Could not delete the build directory\nReturned " ret))
