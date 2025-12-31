@@ -8,7 +8,9 @@ Currently work in progress.
 
 ## Use
 
-For Quickstart:
+You can use this template on github, or clone the repo and reinit it to use it.
+
+Otherwise for raw Quickstart:
 
 Copy `buildlib.scm` into root folder. 
 Then create a `build.scm` file with the following base:
@@ -29,7 +31,7 @@ Then create a `build.scm` file with the following base:
 ;; (clean) ;; You can also provide a condition here
 ```
 
-You can also find a slightly more involved example in the testing `build.scm`.
+You can also find a slightly more involved example in the `build.scm`.
 Otherwise you have the full power of Scheme to make it work for your usecase.
 
 Note that `configure` has defaults, e.g. `#:c-compiler "cc" #:source-dir "src" #:build-dir "build" #:optimization "-O0"`.
@@ -53,3 +55,5 @@ However, note that copying the script directly makes it easier to modify and dis
 Compatibility with other Schemes is dubious and untested.
 
 This is intended to work on *nix systems, others may or may not work.
+
+Note that this is licensed under MPL version 2.0.

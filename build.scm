@@ -12,7 +12,7 @@
 
 (compile-c)
 
-;;(install) We do not want to install an example
+;;(install)
 
 (clean (memq #t (map (lambda (x) (equal? "clean" x))
                      (command-line))))
