@@ -1,14 +1,14 @@
 #! /usr/local/bin/guile -s
 !#
 
-(define root (dirname (canonicalize-path (current-filename))))
-
-(add-to-load-path root)
+;; Use current folder, can also use enviroment variables here for absolute
+;; You can also provide root path to configure, but "." is default anyway
+(add-to-load-path ".")
 (use-modules (buildlib))
 
 (disable-default-failure)
 
-(configure #:root root #:exe-name "zzz-example")
+(configure #:exe-name "zzz-example")
 
 (compile-c)
 

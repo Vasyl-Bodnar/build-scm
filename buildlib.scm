@@ -4,6 +4,11 @@
 (define-module (buildlib)
   #:autoload (ice-9 optargs) (define*)
   #:autoload (ice-9 ftw) (nftw)
+  #:autoload (ice-9 threads) (par-map n-par-map)
+  #:autoload (ice-9 binary-ports) (get-u8)
+  #:autoload (ice-9 textual-ports) (get-line get-string-all)
+  #:autoload (ice-9 popen) (open-pipe*)
+  #:autoload (srfi srfi-1) (drop-right! last)
   #:export (configure compile-c install clean disable-default-failure))
 
 (define *c-compiler* #f)
@@ -18,6 +23,7 @@
 
 (define *root* #f)
 (define *metadata* #f)
+(define *compiler-info-hash* #f)
 
 (define fss file-name-separator-string)
 
@@ -52,8 +58,24 @@
 (define (disable-default-failure)
   (set! *fatal-fail* 'ok))
 
+;; TODO: Use a proper hash, but good enough for testing
+(define (hash-port port)
+  (do ((byte (get-u8 port) (get-u8 port)) (hash 0 (logxor byte hash)))
+      ((eof-object? byte) hash)))
+
+(define (hash-compiler-info)
+  (let* ((port (open-pipe* OPEN_READ *c-compiler* "--version"))
+         (str (get-string-all port)))
+    (close-port port)
+    (if (eof-object? str)
+        (fail "Could not get compiler version"))
+    (let* ((port (open-input-string (string-append str *extra-args*)))
+           (hash (hash-port port)))
+      (close-input-port port)
+      hash)))
+
 ;; lib-type is 'none 'static or 'dynamic
-(define* (configure #:key (c-compiler "cc") (root (current-filename))
+(define* (configure #:key (c-compiler "cc") (root ".")
                     (exe-name "a") (lib-name "a") (lib-type 'none)
                     (source-dir "src") (build-dir "build") (obj-dir "obj")
                     (optimization "-O0") (debug "") (wall ""))
@@ -69,58 +91,81 @@
                        (if (equal? wall "") wall (string-append " " wall))))
   (set! *metadata* (string-append *build-directory* fss ".metadata"))
   (unless (equal? lib-type 'none)
-    (begin
-      (set! *library* (string-append *build-directory* fss lib-name))
-      (set! *library-type* lib-type)))
-  (unless (system* *c-compiler* "--version")
-    (fail "Could not find a c compiler: " *c-compiler*))
+    (set! *library* (string-append *build-directory* fss lib-name))
+    (set! *library-type* lib-type))
+  (let ((compiler-info-hash (hash-compiler-info)))
+    (if compiler-info-hash
+        (set! *compiler-info-hash* compiler-info-hash)
+        (fail "Could not find a c compiler: " *c-compiler*)))
   (unless (let ((st (stat *source-directory* #f)))
             (and st (eq? (stat:type st) 'directory)))
     (fail "Could not find a source directory named " *source-directory*))
   (unless (let ((st (stat *build-directory* #f)))
             (and st (eq? (stat:type st) 'directory)))
-    (begin
-      (warn "Could not find a build directory named " *build-directory*)
-      (info "Creating the build directory")
-      (mkdir *build-directory*)))
+    (warn "Could not find a build directory named " *build-directory*)
+    (info "Creating the build directory")
+    (mkdir *build-directory*))
   (unless (let ((st (stat *obj-build-directory* #f)))
             (and st (eq? (stat:type st) 'directory)))
-    (begin
-      (warn "Could not find an object directory named " *obj-build-directory*)
-      (info "Creating the obj directory")
-      (mkdir *obj-build-directory*)))
+    (warn "Could not find an object directory named " *obj-build-directory*)
+    (info "Creating the obj directory")
+    (mkdir *obj-build-directory*))
   (unless (file-exists? *metadata*)
-    (begin
-      (warn "Could not find metadata")
-      (info "Creating new metadata")
-      (let ((file (open *metadata* O_CREAT)))
-        (close file))))
+    (warn "Could not find metadata")
+    (info "Creating new metadata")
+    (let ((file (open *metadata* O_CREAT)))
+      (close file)))
   (return-fail))
 
-;; TODO: HASH
-(define (check-cache src obj)
-  (let ((file-hash ""))
-    (and (file-exists? obj)
-         (call-with-input-file *metadata*
-           (lambda (port)
-             #f)))))
+(define (link-exe objs)
+  (info "Linking an executable")
+  (let ((result (status:exit-val (apply system* (cons *c-compiler* (append (map caddr objs) (list "-o" *executable*)))))))
+    (if (= result 0) #t (fail "Could not link an executable\nReturned " (number->string result)))))
+
+(define (handle-hash args)
+  (case (car args)
+    ((hashed) (cadr args))
+    ((finished) (call-with-input-file (cadr args) hash-port))))
+
+(define (check-cache src obj hashes)
+  (if (file-exists? obj)
+      (let* ((file-hash (call-with-input-file src hash-port))
+             (found (member file-hash hashes)))
+        (if found (car found) #f))
+      #f))
+
+(define* (hash-inputs objs #:key (num-threads #f))
+  (info "Hashing sources")
+  (let ((hashes (if num-threads
+                    (n-par-map num-threads handle-hash objs)
+                    (par-map handle-hash objs))))
+    (call-with-output-file *metadata*
+      (lambda (port)
+        (display *compiler-info-hash* port)
+        (newline port)
+        (for-each (lambda (hash)
+                    (display hash port)
+                    (newline port))
+                  hashes)))))
 
 (define (compile-c-object-file src obj)
   (info "Compiling " (basename src))
   (let ((result (status:exit-val (system* *c-compiler* *extra-args* "-c" src "-o" obj))))
-    (if (= result 0) #t
-        (fail "Could not compile a file: " (basename src) "\nReturned " (number->string result)))))
+    (if (= result 0) (list 'finished src obj)
+        (list #f "Could not compile a file: " (basename src) "\nReturned " (number->string result)))))
 
-(define (link-exe objs)
-  (info "Linking an executable")
-  (let ((result (status:exit-val (apply system* (cons *c-compiler* (append objs (list "-o" *executable*)))))))
-    (if (= result 0) #t (fail "Could not link an executable\nReturned " (number->string result)))))
+(define (handle-compile result)
+  (case (car result)
+    ((hashed) result)
+    ((unfinished) (apply compile-c-object-file (cdr result)))))
 
-;; TODO: HASH
-(define (hash-inputs objs)
-  (info "Hashing sources"))
+(define (check-objs objs)
+  (for-each
+   (lambda (obj)
+     (unless (car obj)
+       (apply fail (cdr obj))))
+   objs))
 
-;; TODO: Currently no threading, futures should make it easy enough
 (define* (compile-c #:key (num-threads #f))
   (unless (and *c-compiler*
                *source-directory*
@@ -129,22 +174,39 @@
                *executable*
                *extra-args*)
     (fail "Must run (configure) first"))
-  (let ((objs '()))
+  (let* ((objs '())
+         (all-hashes (call-with-input-file *metadata*
+                       (lambda (port)
+                         (do ((hash (get-line port) (get-line port))
+                              (list '() (cons (string->number hash) list)))
+                             ((eof-object? hash) list)))))
+         (compiler-hash-good?
+          (and (> (length all-hashes) 1) (= *compiler-info-hash* (last all-hashes))))
+         (hashes (if compiler-hash-good? (drop-right! all-hashes 1) '())))
     (nftw
      *source-directory*
      (lambda (filename statinfo flag base level)
        (case flag
          ((regular)
           (unless (equal? (basename filename) (basename filename ".c"))
-            (let ((obj-filename (string-append *obj-build-directory* fss (basename filename ".c") ".o")))
-              (set! objs (cons obj-filename objs))
-              (if (check-cache filename obj-filename)
-                  (info "Already compiled, skipping " (basename filename))
-                  (compile-c-object-file filename obj-filename)))))
+            (let* ((obj-filename (string-append *obj-build-directory* fss (basename filename ".c") ".o"))
+                   (hash (if compiler-hash-good?
+                             (check-cache filename obj-filename hashes)
+                             #f)))
+              (if hash
+                  (begin
+                    (info "Already compiled, skipping " (basename filename))
+                    (set! objs (cons (list 'hashed hash obj-filename) objs)))
+                  (set! objs (cons (list 'unfinished filename obj-filename) objs)))
+              #t)))
          ((directory) (info "Entering a directory: " (basename filename)))
          ((invalid-stat) (fail "Could not stat a file: " (basename filename)))
          ((directory-not-readable) (fail "Directory is not readable: " (basename filename)))
          ((stale-symlink) (fail "Could not follow a symlink: " (basename filename))))))
+    (if num-threads
+        (set! objs (n-par-map num-threads handle-compile objs))
+        (set! objs (par-map handle-compile objs)))
+    (check-objs objs)
     (if (check-fail) (link-exe objs))
     (if (check-fail) (hash-inputs objs)))
   (return-fail))
@@ -158,22 +220,21 @@
 ;; This is a careful clean that only targets what it itself may have produced
 ;; If you truly need a nuclear option, it shall be provided
 (define* (clean  #:optional (conditional #t) #:key (nuclear #f))
-  (if conditional
-      (begin
-        (info "Cleaning builds")
-        (if nuclear
-            (let ((result (status:exit-val (system* "rm" "-r" *build-directory*))))
-              (unless (= result 0) (fail "Could not delete the build directory\nReturned " (number->string result))))
-            (begin
-              (delete-file *executable*)
-              (delete-file *metadata*)
-              (nftw *obj-build-directory*
-                    (lambda (filename statinfo flag base level)
-                      (if (and (eq? flag 'regular) (not (equal? (basename filename) (basename filename ".o"))))
-                          (begin (delete-file filename) #t)
-                          #t)))
-              (let ((result (status:exit-val (system* "rmdir" *obj-build-directory*))))
-                (unless (= result 0) (fail "Could not delete the obj directory\nReturned " (number->string result))))
-              (let ((result (status:exit-val (system* "rmdir" *build-directory*))))
-                (unless (= result 0) (fail "Could not delete the build directory\nReturned " (number->string result))))))))
+  (when conditional
+    (info "Cleaning builds")
+    (if nuclear
+        (let ((result (status:exit-val (system* "rm" "-r" *build-directory*))))
+          (unless (= result 0) (fail "Could not delete the build directory\nReturned " (number->string result))))
+        (begin
+          (delete-file *executable*)
+          (delete-file *metadata*)
+          (nftw *obj-build-directory*
+                (lambda (filename statinfo flag base level)
+                  (if (and (eq? flag 'regular) (not (equal? (basename filename) (basename filename ".o"))))
+                      (begin (delete-file filename) #t)
+                      #t)))
+          (let ((result (status:exit-val (system* "rmdir" *obj-build-directory*))))
+            (unless (= result 0) (fail "Could not delete the obj directory\nReturned " (number->string result))))
+          (let ((result (status:exit-val (system* "rmdir" *build-directory*))))
+            (unless (= result 0) (fail "Could not delete the build directory\nReturned " (number->string result)))))))
   (return-fail))
