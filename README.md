@@ -1,6 +1,8 @@
 # build.scm
 
-No dependency build system script for C.
+Build system library and script for C with no dependencies other than Guile and a few system commands.
+
+Capable of caching and has plenty of options to tweak, while being kept simple.
 
 Currently work in progress.
 
@@ -34,7 +36,7 @@ Note that `configure` has defaults, e.g. `#:c-compiler "cc" #:source-dir "src" #
 If you do not find these appealing, do change them.
 
 You can also disable the default behaviour to exit with a failure when encountering an error using `(disable-default-failure)`. 
-In that case you should handle the `'ok` and `'fail` symbols for configure and compile commands.
+In that case you should handle the `'ok` and `'fail` symbols for all commands
 
 More information can be seen in the `buildlib.scm` file.
 
