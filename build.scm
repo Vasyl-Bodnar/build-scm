@@ -12,7 +12,8 @@
 
 (compile-c)
 
-;;(install)
+(install (memq #t (map (lambda (x) (equal? "install" x))
+                       (command-line))))
 
 (clean (memq #t (map (lambda (x) (equal? "clean" x))
                      (command-line))))

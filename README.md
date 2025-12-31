@@ -19,6 +19,7 @@ Then create a `build.scm` file with the following base:
 #! /usr/local/bin/guile -s
 !#
 
+;; You can also use absolute path to root here, and in configure
 (add-to-load-path ".")
 (use-modules (buildlib))
 
@@ -26,9 +27,9 @@ Then create a `build.scm` file with the following base:
 
 (compile-c)
 
-(install)
+(install #f) ;; First argument is an optional condition for all commands
 
-;; (clean) ;; You can also provide a condition here
+(clean #f)
 ```
 
 You can also find a slightly more involved example in the `build.scm`.
@@ -38,7 +39,7 @@ Note that `configure` has defaults, e.g. `#:c-compiler "cc" #:source-dir "src" #
 If you do not find these appealing, do change them.
 
 You can also disable the default behaviour to exit with a failure when encountering an error using `(disable-default-failure)`. 
-In that case you should handle the `'ok` and `'fail` symbols for all commands
+In that case you should handle the `'ok` and `'fail` symbols for all commands.
 
 More information can be seen in the `buildlib.scm` file.
 
