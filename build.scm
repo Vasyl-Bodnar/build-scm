@@ -8,8 +8,7 @@
 
 (disable-default-failure)
 
-(configure #:exe-name "zzz-example")
-
+(configure #:exe-name "zzz-example" #:lib-source-dir "src/lib" #:lib-name "libzzz-example" #:lib-type 'both)
 (compile-c)
 
 (install (memq #t (map (lambda (x) (equal? "install" x))

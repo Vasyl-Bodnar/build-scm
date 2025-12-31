@@ -23,7 +23,7 @@ Then create a `build.scm` file with the following base:
 (add-to-load-path ".")
 (use-modules (buildlib))
 
-(configure #:exe-name "my-app")
+(configure #:exe-name "my-app") ;; and/or #:lib-name "my-lib" #:lib-type 'both
 
 (compile-c)
 
@@ -35,7 +35,7 @@ Then create a `build.scm` file with the following base:
 You can also find a slightly more involved example in the `build.scm`.
 Otherwise you have the full power of Scheme to make it work for your usecase.
 
-Note that `configure` has defaults, e.g. `#:c-compiler "cc" #:source-dir "src" #:build-dir "build" #:optimization "-O0"`.
+Note that `configure` has defaults, e.g. `#:c-compiler "cc" #:source-dir "src" #:build-dir "build" #:optimization "-O0"` and more.
 If you do not find these appealing, do change them.
 
 You can also disable the default behaviour to exit with a failure when encountering an error using `(disable-default-failure)`. 
