@@ -1,3 +1,7 @@
 #include "lib/lib.h"
 
-int main(void) { return example(); }
+#ifdef XXX
+int fruit() { return 0; }
+#endif
+
+int main(void) { return example() + fruit(); }

@@ -57,4 +57,5 @@ Compatibility with other Schemes is dubious and untested.
 
 This is intended to work on *nix systems, others may or may not work.
 
-Note that this is licensed under MPL version 2.0.
+Note that `buildlib.scm` is licensed under MPL version 2.0.
+`build.scm` and code examples in `README` are licensed under BSD-3

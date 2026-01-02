@@ -1,5 +1,6 @@
 #! /usr/local/bin/guile -s
 !#
+;;; SPDX-License-Identifier: BSD-3-Clause
 
 ;; Use current folder, can also use enviroment variables here for absolute
 ;; You can also provide root path to configure, but "." is default anyway
@@ -8,7 +9,9 @@
 
 (disable-default-failure)
 
-(configure #:exe-name "zzz-example" #:lib-source-dir "src/lib" #:lib-name "libzzz-example" #:lib-type 'both)
+(configure #:exe-name "zzz-example"
+           #:lib-source-dir "src/lib" #:lib-name "libzzz-example" #:lib-type 'both
+           #:derive '(XXX))
 
 (compile-c)
 
