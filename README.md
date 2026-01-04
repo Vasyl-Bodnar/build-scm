@@ -1,5 +1,4 @@
 # build.scm
-
 Build system library and script for C with no dependencies other than Guile and a few system commands.
 
 Capable of caching and has plenty of options to tweak, while being kept simple.
@@ -7,7 +6,6 @@ Capable of caching and has plenty of options to tweak, while being kept simple.
 Currently work in progress.
 
 ## Use
-
 You can use this template on github, or clone the repo and reinit it to use it.
 
 Otherwise for raw Quickstart:
@@ -22,6 +20,8 @@ Then create a `build.scm` file with the following base:
 ;; You can also use absolute path to root here, and in configure
 (add-to-load-path ".")
 (use-modules (buildlib))
+
+;;(cache) ;; Can modify some cache settings or disable it
 
 (configure #:exe-name "my-app") ;; and/or #:lib-name "my-lib" #:lib-type 'both
 
@@ -51,11 +51,11 @@ For Guile, you can also copy the script or compile it to your site folder
 This change would allow you to get rid of `(add-to-load-path)`.
 However, note that copying the script directly makes it easier to modify and distribute.
 
-## Support and Compatibility
-
+## Compatibility and Licensing
 Compatibility with other Schemes is dubious and untested.
 
 This is intended to work on *nix systems, others may or may not work.
 
 Note that `buildlib.scm` is licensed under MPL version 2.0.
-`build.scm` and code examples in `README` are licensed under BSD-3
+
+`build.scm` and code examples in `README` and `src` are licensed under BSD-3
