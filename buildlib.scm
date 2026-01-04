@@ -223,7 +223,7 @@
 
 (define (check-cache src obj hashes)
   (if (file-exists? obj)
-      (let* ((file-hash (hash-file src))
+      (let* ((file-hash (hash-c-file src))
              (found (member file-hash hashes)))
         (if found (car found) #f))
       #f))
