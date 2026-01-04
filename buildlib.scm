@@ -80,7 +80,7 @@
     (close-port port)
     hash))
 
-;; This works, but is rather fragile
+;; FIX: This works, but is rather fragile
 (define (hash-port port)
   (let* ((tmp-port (mkstemp "/tmp/build-XXXXXX"))
          (bv (get-bytevector-all port)))
@@ -201,13 +201,24 @@
           (mkdir *obj-build-directory*))))
   (return-fail))
 
+(define (hash-c-file source-file)
+  (let* ((port (open-pipe* OPEN_READ *c-compiler* "-E" source-file))
+         (str (get-string-all port)))
+    (close-port port)
+    (if (eof-object? str)
+        (fail "Could not macro expand file " (basename source-file)))
+    (let* ((port (open-input-string str))
+           (hash (hash-port port)))
+      (close-input-port port)
+      hash)))
+
 ;; args is one of
 ;; ('hashed hash obj-filename)
 ;; ('finished filename obj-filename)
 (define (handle-hash args)
   (case (car args)
     ((hashed) (cadr args))
-    ((finished) (hash-file (cadr args)))
+    ((finished) (hash-c-file (cadr args)))
     ((unfinished) #f)))
 
 (define (check-cache src obj hashes)
@@ -402,6 +413,8 @@
         (system*-fail (lambda (ret) (fail "Could not delete the build directory\nReturned " ret))
                       "rm" "-r" *build-directory*)
         (begin
+          (when (file-exists? (in-vicinity *build-directory* "obj"))
+            (delete-dir (in-vicinity *build-directory* "obj")))
           (delete-dir *obj-build-directory*)
           (for-each delete-dir
                     (map (lambda (f) (in-vicinity *metadata* f))
