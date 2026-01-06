@@ -202,7 +202,7 @@
   (return-fail))
 
 (define (hash-c-file source-file)
-  (let* ((port (open-pipe* OPEN_READ *c-compiler* "-E" source-file))
+  (let* ((port (apply open-pipe* (append (list OPEN_READ *c-compiler* "-E") (cdddr *extra-args*) (list source-file))))
          (str (get-string-all port)))
     (close-port port)
     (if (eof-object? str)
