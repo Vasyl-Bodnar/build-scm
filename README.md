@@ -23,7 +23,7 @@ Then create a `build.scm` file with the following base:
 
 ;;(cache) ;; Can modify some cache settings or disable it
 
-(configure #:exe-name "my-app") ;; and/or #:lib-name "my-lib" #:lib-type 'both
+(configure #:exe-name "my-app") ;; and/or #:lib-name "my-lib", lots of other settings
 
 (compile-c)
 

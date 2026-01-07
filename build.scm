@@ -7,20 +7,25 @@
 (add-to-load-path ".")
 (use-modules (buildlib))
 
-;; Can also enable/disable cache, or increase number of configs to keep
-;; Note that each config keeps all its objects, so too many, unless necessary, might take up too much space
+;; Simple conditionals to check if one of the arguments was install or clean
+;; You can do more complicated checks or argument parsing
+(define install? (memq #t (map (lambda (x) (equal? "install" x)) (command-line))))
+(define clean? (memq #t (map (lambda (x) (equal? "clean" x)) (command-line))))
+(define compile? (not clean?))
+
+;; Can also enable/disable cache, or increase number of compiler configs to keep
+;; Note that each config keeps all of its objects, so too many might take up too much space
 ;;(cache #:enable #t #:keep-configs 3)
 
-;; Can do multiple configurations and compilations, use different names of course
+;; Can do multiple configurations and compilations
 (configure #:exe-name "zzz-example"
-           #:lib-source-dir "src/lib" #:lib-name "libzzz-example" #:lib-type 'both
+           #:lib-name "libzzz-example" #:lib-source-dir "src/lib" #:lib-type 'both
+           #:link '("m") ;; or if you want to specify '((static "m"))
+           ;; Other linking options are #:link-path '(pathes-to-libs) #:include '(pathes-to-includes)
            #:derive '(XXX))
 
-(compile-c)
+(compile-c compile?)
 
-;; Simple conditionals to check if one of the arguments was install or clean
-(install (memq #t (map (lambda (x) (equal? "install" x))
-                       (command-line))))
+(install install?)
 
-(clean (memq #t (map (lambda (x) (equal? "clean" x))
-                     (command-line))))
+(clean clean?)
