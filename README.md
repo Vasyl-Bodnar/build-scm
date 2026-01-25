@@ -36,7 +36,7 @@ Then create a `build.scm` file with the following base:
 You can also find a slightly more involved example in the `build.scm`.
 Otherwise you have the full power of Scheme to make it work for your usecase.
 
-Note that `configure` has defaults across many parts, e.g. `#:c-compiler "cc" #:source-dir "src" #:build-dir "build" #:optimization "-O0"` and more.
+Note that `configure` has defaults across many parts, e.g. `#:c-compiler "cc" #:src-dir "src" #:build-dir "build" #:optimization "-O0"` and more.
 If you do not find these appealing, do change them.
 
 You can also check what config outputs with `(print-config config)`. Or just for errors with `(display (config-error config))`.
