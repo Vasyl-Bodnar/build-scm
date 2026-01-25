@@ -13,19 +13,16 @@
 (define clean? (memq #t (map (lambda (x) (equal? "clean" x)) (command-line))))
 (define compile? (not clean?))
 
-;; Can also enable/disable cache, or increase number of compiler configs to keep
-;; Note that each config keeps all of its objects, so too many might take up too much space
-;;(cache #:enable #t #:keep-configs 3)
-
 ;; Can do multiple configurations and compilations
-(configure #:exe-name "zzz-example"
-           #:lib-name "libzzz-example" #:lib-source-dir "src/lib" #:lib-type 'both
-           #:link '("m") ;; or if you want to specify '((static "m"))
-           ;; Other linking options are #:link-path '(pathes-to-libs) #:include '(pathes-to-includes)
-           #:derive '(XXX))
+(define config (configure #:exe-name "zzz-example"
+                          #:lib-name "libzzz-example" #:lib-src-dir "src/lib" #:lib-type 'both
+                          #:link '("m") ;; or if you want to specify '((static "m"))
+                          #:derive '(XXX))) ;; Other linking options are #:link-path '(pathes-to-libs) #:include '(pathes-to-includes)
+;; Can also enable/disable cache, or increase number of compiler configs to keep
+;; #:enable #t #:keep-configs 3
 
-(compile-c compile?)
+(compile-c config compile?)
 
-(install install?)
+(install config install?)
 
-(clean clean?)
+(clean config clean?)
