@@ -39,6 +39,8 @@ Otherwise you have the full power of Scheme to make it work for your usecase.
 Note that `configure` has defaults across many parts, e.g. `#:c-compiler "cc" #:src-dir "src" #:build-dir "build" #:optimization "-O0"` and more.
 If you do not find these appealing, do change them.
 
+Also supports `run-external` if you want to run your own special commands with support for moving outputs to build directory (either specified or from config)
+
 You can also check what config outputs with `(print-config config)`. Or just for errors with `(display (config-error config))`.
 The config structure does not mutate for any of the fields, except for errors.
 

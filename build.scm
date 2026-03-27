@@ -9,6 +9,7 @@
 
 ;; Simple conditionals to check if one of the arguments was install or clean
 ;; You can do more complicated checks or argument parsing
+(define external? (memq #t (map (lambda (x) (equal? "external" x)) (command-line))))
 (define install? (memq #t (map (lambda (x) (equal? "install" x)) (command-line))))
 (define clean? (memq #t (map (lambda (x) (equal? "clean" x)) (command-line))))
 (define compile? (not clean?))
@@ -20,6 +21,10 @@
                           #:derive '(XXX))) ;; Other linking options are #:link-path '(pathes-to-libs) #:include '(pathes-to-includes)
 ;; Can also enable/disable cache, or increase number of compiler configs to keep
 ;; #:enable #t #:keep-configs 3
+
+;; Can run your external commands for misc needs
+;; #:outputs '("my-out") if you want to move some outputs to build directory (either #:build-dir or from config)
+(run-external config external? #:name "sh" #:args '("-c" "echo Hello from run-external"))
 
 (compile-c config compile?)
 
